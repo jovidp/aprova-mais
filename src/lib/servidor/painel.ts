@@ -2,6 +2,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { dataLocal, diaSemanaDe, somarDias } from "@/lib/estudo/tempo";
 import { calcularDominio, evidenciaDeLinha, type ResultadoDominio } from "@/lib/estudo/dominio";
+import { obterUsuario } from "@/lib/auth";
 
 export interface ResumoDesempenho {
   periodo: { inicio: string; fim: string; fuso: string };
@@ -27,6 +28,9 @@ export async function resumoDesempenho(supabase: SupabaseClient, inicio: string,
 }
 
 export async function fusoDoUsuario(supabase: SupabaseClient, userId: string) {
+  // O fuso do usuário logado já vem com o perfil (memorizado por requisição).
+  const atual = await obterUsuario();
+  if (atual?.id === userId) return atual.fuso;
   const { data } = await supabase.from("preferencias_usuario").select("fuso_horario").eq("user_id", userId).maybeSingle();
   return data?.fuso_horario ?? "America/Sao_Paulo";
 }
@@ -70,10 +74,10 @@ export async function progressoMetas(supabase: SupabaseClient, userId: string): 
     semanal: { inicio: inicioDaSemana(hoje), fim: somarDias(inicioDaSemana(hoje), 6) },
     mensal: { inicio: `${hoje.slice(0, 7)}-01`, fim: hoje },
   } as const;
-  const resumos = new Map<string, ResumoDesempenho>();
-  for (const p of new Set(metas.map((m) => m.periodo as keyof typeof intervalos))) {
-    resumos.set(p, await resumoDesempenho(supabase, intervalos[p].inicio, intervalos[p].fim));
-  }
+  const periodos = [...new Set(metas.map((m) => m.periodo as keyof typeof intervalos))];
+  const resumos = new Map<string, ResumoDesempenho>(await Promise.all(
+    periodos.map(async (p) => [p, await resumoDesempenho(supabase, intervalos[p].inicio, intervalos[p].fim)] as const),
+  ));
   return metas.map((m) => {
     const periodo = m.periodo as keyof typeof intervalos;
     const r = resumos.get(periodo)!;

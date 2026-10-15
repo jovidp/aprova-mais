@@ -49,13 +49,9 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/configuracao-pendente", request.url));
   }
 
-  // IP banido: bloqueia tudo (inclusive login e cadastro).
+  // IP banido: consulta iniciada em paralelo com a verificação da sessão.
   const ip = ipDoCliente(request.headers);
-  if (ip && (await ipEstaBloqueado(ip, url, chave))) {
-    return caminho.startsWith("/api/")
-      ? NextResponse.json({ erro: "Acesso bloqueado." }, { status: 403 })
-      : new NextResponse(PAGINA_BLOQUEIO, { status: 403, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
-  }
+  const consultaBloqueio = ip ? ipEstaBloqueado(ip, url, chave) : Promise.resolve(false);
 
   let resposta = NextResponse.next({ request });
   const supabase = createServerClient(url, chave, {
@@ -72,6 +68,13 @@ export async function proxy(request: NextRequest) {
   // Não coloque código entre a criação do cliente e getClaims(): a renovação depende disso.
   const { data } = await supabase.auth.getClaims();
   const logado = Boolean(data?.claims?.sub);
+
+  // Bloqueia tudo para IP banido (inclusive login e cadastro).
+  if (await consultaBloqueio) {
+    return caminho.startsWith("/api/")
+      ? NextResponse.json({ erro: "Acesso bloqueado." }, { status: 403 })
+      : new NextResponse(PAGINA_BLOQUEIO, { status: 403, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+  }
 
   if (!logado && !rotaPublica(caminho)) {
     const destino = new URL("/entrar", request.url);

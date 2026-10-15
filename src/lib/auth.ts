@@ -9,6 +9,8 @@ export interface UsuarioAtual {
   nome: string;
   papel: "aluno" | "admin";
   onboardingConcluido: boolean;
+  /** Fuso das preferências, carregado junto com o perfil (evita outra consulta por página). */
+  fuso: string;
 }
 
 /**
@@ -22,15 +24,18 @@ export const obterUsuario = cache(async (): Promise<UsuarioAtual | null> => {
   if (error || !id) return null;
   const { data: perfil } = await supabase
     .from("profiles")
-    .select("nome, papel, onboarding_concluido")
+    .select("nome, papel, onboarding_concluido, preferencias_usuario(fuso_horario)")
     .eq("id", id)
     .maybeSingle();
+  const pref = perfil?.preferencias_usuario as unknown as { fuso_horario: string } | { fuso_horario: string }[] | null;
+  const fuso = (Array.isArray(pref) ? pref[0] : pref)?.fuso_horario ?? "America/Sao_Paulo";
   return {
     id,
     email: (data.claims.email as string | undefined) ?? null,
     nome: perfil?.nome ?? "",
     papel: perfil?.papel === "admin" ? "admin" : "aluno",
     onboardingConcluido: Boolean(perfil?.onboarding_concluido),
+    fuso,
   };
 });
 

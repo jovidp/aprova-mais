@@ -1,6 +1,9 @@
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { exigirUsuario } from "@/lib/auth";
 import { clienteServidor } from "@/lib/supabase/servidor";
+import { ipDoCliente } from "@/lib/rede/ip";
 import { Shell } from "@/components/app/shell";
 
 export default async function LayoutApp({ children }: LayoutProps<"/">) {
@@ -9,6 +12,17 @@ export default async function LayoutApp({ children }: LayoutProps<"/">) {
   if (!usuario.onboardingConcluido) redirect("/onboarding");
 
   const supabase = await clienteServidor();
+
+  // Registra o IP de acesso depois de enviar a página (usado na moderação).
+  const cabecalhos = await headers();
+  const ip = ipDoCliente(cabecalhos);
+  if (ip) {
+    const agente = cabecalhos.get("user-agent")?.slice(0, 500) ?? null;
+    after(async () => {
+      await supabase.rpc("registrar_acesso", { p_ip: ip, p_user_agent: agente });
+    });
+  }
+
   const { count } = await supabase
     .from("notificacoes")
     .select("id", { count: "exact", head: true })

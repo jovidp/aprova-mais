@@ -1,4 +1,7 @@
 import type { Metadata } from "next";
+import Link from "next/link";
+import { Users } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { exigirAdmin } from "@/lib/auth";
 import { adminDisponivel, clienteAdmin } from "@/lib/supabase/servidor";
 import { estadoIA } from "@/lib/ia";
@@ -27,7 +30,8 @@ export default async function PaginaAdmin() {
 
   return (
     <>
-      <CabecalhoPagina titulo="Administração" descricao="Visão geral da plataforma. Somente leitura." />
+      <CabecalhoPagina titulo="Administração" descricao="Visão geral da plataforma."
+        acoes={<Button asChild><Link href="/admin/usuarios"><Users /> Usuários, banimentos e IPs</Link></Button>} />
       <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-6">
         <Indicador rotulo="Usuários" valor={usuarios} />
         <Indicador rotulo="Materiais" valor={materiais} detalhe={materiaisErro ? `${materiaisErro} com erro` : undefined} />

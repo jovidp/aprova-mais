@@ -1,5 +1,33 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { ipDoCliente } from "@/lib/rede/ip";
+
+// Resultado da consulta de bloqueio por IP, em cache por instância (1 min).
+const cacheBloqueio = new Map<string, { bloqueado: boolean; ate: number }>();
+
+async function ipEstaBloqueado(ip: string, url: string, chave: string) {
+  const agora = Date.now();
+  const salvo = cacheBloqueio.get(ip);
+  if (salvo && salvo.ate > agora) return salvo.bloqueado;
+  try {
+    const r = await fetch(`${url}/rest/v1/rpc/ip_bloqueado`, {
+      method: "POST",
+      headers: { apikey: chave, Authorization: `Bearer ${chave}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ p_ip: ip }),
+      signal: AbortSignal.timeout(2500),
+    });
+    const bloqueado = r.ok ? (await r.json()) === true : false;
+    if (cacheBloqueio.size > 5000) cacheBloqueio.clear();
+    cacheBloqueio.set(ip, { bloqueado, ate: agora + 60_000 });
+    return bloqueado;
+  } catch {
+    // Falha na consulta não derruba o site; tenta de novo na próxima requisição.
+    return false;
+  }
+}
+
+const PAGINA_BLOQUEIO = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Acesso bloqueado</title></head>
+<body style="font-family:system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;margin:0;background:#0f172a;color:#e2e8f0"><main style="text-align:center;padding:24px"><h1 style="font-size:22px">Acesso bloqueado</h1><p>O acesso a esta plataforma foi bloqueado para a sua conexão.</p></main></body></html>`;
 
 const ROTAS_PUBLICAS = ["/entrar", "/cadastro", "/recuperar-senha", "/auth", "/api/health", "/api/cron", "/offline", "/configuracao-pendente"];
 
@@ -19,6 +47,14 @@ export async function proxy(request: NextRequest) {
   if (!url || !chave) {
     if (caminho.startsWith("/configuracao-pendente") || caminho.startsWith("/api/health")) return NextResponse.next();
     return NextResponse.redirect(new URL("/configuracao-pendente", request.url));
+  }
+
+  // IP banido: bloqueia tudo (inclusive login e cadastro).
+  const ip = ipDoCliente(request.headers);
+  if (ip && (await ipEstaBloqueado(ip, url, chave))) {
+    return caminho.startsWith("/api/")
+      ? NextResponse.json({ erro: "Acesso bloqueado." }, { status: 403 })
+      : new NextResponse(PAGINA_BLOQUEIO, { status: 403, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
   }
 
   let resposta = NextResponse.next({ request });

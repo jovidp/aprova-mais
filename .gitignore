@@ -43,7 +43,7 @@ next-env.d.ts
 
 # materiais locais e relatórios (podem conter conteúdo licenciado e dados pessoais)
 *.zip
-relatorios/
+/relatorios/
 /public/pdf.worker.min.mjs
 
 # executável do inicializador (gerado a partir de launcher/AprovaMais.cs)

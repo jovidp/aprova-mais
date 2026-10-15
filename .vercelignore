@@ -1,0 +1,12 @@
+# Nunca enviar segredos, o ZIP de materiais nem artefatos locais.
+.env
+.env.*
+!.env.example
+*.zip
+/relatorios/
+/node_modules/
+/.next/
+/tests/
+/coverage/
+tsconfig.tsbuildinfo
+index.ht
